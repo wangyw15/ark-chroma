@@ -1,0 +1,16 @@
+{
+    "wifi": {
+        "mode": "sta",
+//        "mode": "ap",
+        "ssid": "ssid",
+        "password": "password"
+    },
+    "http": {
+        "port": 80
+    },
+    "light": {
+        "gpio": 4,
+        "count": 10,
+        "default_color": "ffffff"
+    }
+}

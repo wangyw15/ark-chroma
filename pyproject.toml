@@ -1,0 +1,14 @@
+[project]
+name = "ark-chroma"
+version = "0.1.0"
+description = "Dock for Arnights Pass Certification"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "microdot>=2.6.2",
+    "micropython-esp32-stubs>=1.29.0.post1",
+]
