@@ -1,10 +1,12 @@
+import asyncio
+import json
 import math
 import time
 
+import aioble
+import bluetooth
 import machine
 import network
-import uasyncio as asyncio
-import json
 from machine import Pin
 from neopixel import NeoPixel
 
@@ -73,7 +75,7 @@ class WebServer:
         ):
             Light.effect_instance.reset()
 
-        Light.set_effect(name, **body.get("param", {}))
+        Light.set_effect(name, body.get("param", {}))
         return {"current": Light.effect_name, "param": Light.effect_param}
 
 
@@ -125,6 +127,44 @@ class Wave:
         return self.FRAME_DELAY
 
 
+class ArkRadarDetect:
+    """雷达探测灯效：瞬间全亮后线性渐暗至熄灭，长暗 1.5s、短暗 0.2s 交替，
+    每轮结束后间隔 0.2s 再进入下一轮。"""
+
+    FRAME_DELAY = 0.02  # 每帧延时（秒）
+    FADE_LONG = 1500    # 长渐暗时长（毫秒）
+    FADE_SHORT = 200    # 短渐暗时长（毫秒）
+    GAP = 200           # 两轮之间的全暗间隔（毫秒）
+
+    def __init__(self, color: str = ""):
+        if not color:
+            color = Light.default_color
+        self.color = Util.hex_to_rgb(color)
+        self.start = time.ticks_ms()  # 周期起点
+
+    def reset(self):
+        self.start = time.ticks_ms()
+
+    def __call__(self):
+        cycle = self.FADE_LONG + self.FADE_SHORT + self.GAP
+        t = time.ticks_diff(time.ticks_ms(), self.start) % cycle
+
+        if t < self.FADE_LONG:
+            factor = 1 - t / self.FADE_LONG
+        elif t < self.FADE_LONG + self.FADE_SHORT:
+            factor = 1 - (t - self.FADE_LONG) / self.FADE_SHORT
+        else:
+            factor = 0.0  # 间隔期保持熄灭
+
+        r, g, b = self.color
+        pixel = (int(r * factor), int(g * factor), int(b * factor))
+        for i in range(Light.count):
+            Light.np[i] = pixel
+        Light.np.write()
+
+        return self.FRAME_DELAY
+
+
 class Light:
     # default for onboard light
     gpio = 48
@@ -137,7 +177,7 @@ class Light:
     effect_name = ""
     effect_instance = None
     effect_param = {}
-    effect_available = {"wave": Wave}
+    effect_available = {"wave": Wave, "arkradardetect": ArkRadarDetect}
 
     @staticmethod
     def init(gpio: int, count: int):
@@ -266,6 +306,63 @@ class Network:
             print("AP started")
 
 
+class ArkRadar:
+    enable = True
+
+    ARKRADAR_PREFIX = "DEPRTS"
+    SIGNAL_THRESHOLD = -42
+
+    SCAN_DURATION = 2  # 每轮扫描时长（秒）
+    SCAN_INTERVAL = 1  # 两轮扫描之间的间隔（秒）
+    LOST_ROUNDS = 2    # 连续多少轮未检测到才判定为离开，避免灯光闪烁
+
+    _triggered = False  # 当前灯效是否由雷达触发
+    _missed = 0         # 连续未检测到的轮数
+    _previous_effect = ""
+    _previous_param = {}
+
+    @staticmethod
+    def _match(result) -> bool:
+        """匹配名称前缀且信号强度达标"""
+        name = result.name()
+        return (
+            name is not None
+            and name.startswith(ArkRadar.ARKRADAR_PREFIX)
+            and result.rssi >= ArkRadar.SIGNAL_THRESHOLD
+        )
+
+    @staticmethod
+    async def loop():
+        while ArkRadar.enable:
+            found = None
+            async with aioble.scan(
+                duration_ms=ArkRadar.SCAN_DURATION * 1000,
+                interval_us=30000,
+                window_us=30000,
+                active=True,
+            ) as scanner:
+                async for result in scanner:
+                    if ArkRadar._match(result):
+                        found = result
+
+            if found is not None:
+                ArkRadar._missed = 0
+                if not ArkRadar._triggered:
+                    print(f"ArkRadar detected: {found.name()}, RSSI: {found.rssi}")
+                    ArkRadar._previous_effect = Light.effect_name
+                    ArkRadar._previous_param = Light.effect_param
+                    Light.set_effect("arkradardetect")
+                    ArkRadar._triggered = True
+            else:
+                ArkRadar._missed += 1
+                if ArkRadar._triggered and ArkRadar._missed >= ArkRadar.LOST_ROUNDS:
+                    print("ArkRadar lost")
+                    Light.set_effect(ArkRadar._previous_effect, ArkRadar._previous_param)
+                    ArkRadar._triggered = False
+
+            await asyncio.sleep(ArkRadar.SCAN_INTERVAL)
+
+
 def main():
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
@@ -286,13 +383,16 @@ def main():
         wifi_mode = network.AP_IF
     else:
         raise ValueError(f"Unknown WiFi mode: {wifi_mode}")
+
     Network.prepare_wifi(wifi_mode, config["wifi"]["ssid"], config["wifi"]["password"])
 
     http_port = config["http"]["port"]
     print(f"Server listening on {http_port}")
+
     loop = asyncio.get_event_loop()
-    loop.create_task(Light.loop())
     loop.create_task(WebServer.app.start_server(port=http_port))
+    loop.create_task(Light.loop())
+    loop.create_task(ArkRadar.loop())
     loop.run_forever()
 
 
