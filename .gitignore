@@ -14,3 +14,6 @@ wheels/
 
 # uv
 uv.lock
+
+# project
+config.json

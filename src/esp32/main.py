@@ -4,14 +4,12 @@ import math
 import time
 
 import aioble
-import bluetooth
 import machine
 import network
 from machine import Pin
-from neopixel import NeoPixel
-
 from microdot import Microdot, Request
-from microdot.websocket import with_websocket, WebSocket
+from microdot.websocket import WebSocket, with_websocket
+from neopixel import NeoPixel
 
 
 class WebServer:
@@ -153,9 +151,9 @@ class ArkRadarDetect:
     每轮结束后间隔 0.2s 再进入下一轮。"""
 
     FRAME_DELAY = 0.02  # 每帧延时（秒）
-    FADE_LONG = 1500    # 长渐暗时长（毫秒）
-    FADE_SHORT = 200    # 短渐暗时长（毫秒）
-    GAP = 200           # 两轮之间的全暗间隔（毫秒）
+    FADE_LONG = 1500  # 长渐暗时长（毫秒）
+    FADE_SHORT = 200  # 短渐暗时长（毫秒）
+    GAP = 200  # 两轮之间的全暗间隔（毫秒）
 
     def __init__(self, color: str = ""):
         if not color:
@@ -335,10 +333,10 @@ class ArkRadar:
 
     SCAN_DURATION = 2  # 每轮扫描时长（秒）
     SCAN_INTERVAL = 1  # 两轮扫描之间的间隔（秒）
-    LOST_ROUNDS = 2    # 连续多少轮未检测到才判定为离开，避免灯光闪烁
+    LOST_ROUNDS = 2  # 连续多少轮未检测到才判定为离开，避免灯光闪烁
 
     _triggered = False  # 当前灯效是否由雷达触发
-    _missed = 0         # 连续未检测到的轮数
+    _missed = 0  # 连续未检测到的轮数
     _previous_effect = ""
     _previous_param = {}
 
@@ -378,7 +376,9 @@ class ArkRadar:
                 ArkRadar._missed += 1
                 if ArkRadar._triggered and ArkRadar._missed >= ArkRadar.LOST_ROUNDS:
                     print("ArkRadar lost")
-                    Light.set_effect(ArkRadar._previous_effect, ArkRadar._previous_param)
+                    Light.set_effect(
+                        ArkRadar._previous_effect, ArkRadar._previous_param
+                    )
                     ArkRadar._triggered = False
 
             await asyncio.sleep(ArkRadar.SCAN_INTERVAL)
