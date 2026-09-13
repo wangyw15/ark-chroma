@@ -42,3 +42,7 @@ uv run python -m src.host.main
 - **音乐律动**：颜色跟随当前播放音乐的专辑封面，亮度跟随音量（目前仅支持Windows）
 - **Forza Horizon 转速表**：颜色随转速由绿转红（需在游戏内 设置 ->
   HUD 与游戏性 中将数据输出 IP/端口指向本机，默认端口 20777）
+
+## 效果图
+
+![under_development](showcase/dev1.jpg)
