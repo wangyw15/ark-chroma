@@ -11,6 +11,7 @@ from machine import Pin
 from neopixel import NeoPixel
 
 from microdot import Microdot, Request
+from microdot.websocket import with_websocket, WebSocket
 
 
 class WebServer:
@@ -46,8 +47,11 @@ class WebServer:
     @staticmethod
     @app.route("/api/light", methods=["POST"])
     def set_light(request: Request):
-        body = request.json
-        Light.set_light(body)
+        if body := request.json:
+            Light.set_light(body)
+            return "success"
+        else:
+            return 400
 
     @staticmethod
     @app.route("/api/animation", methods=["GET"])
@@ -77,6 +81,23 @@ class WebServer:
 
         Light.set_effect(name, body.get("param", {}))
         return {"current": Light.effect_name, "param": Light.effect_param}
+
+    @staticmethod
+    @app.route("/api/ws")
+    @with_websocket
+    async def websocket(request: Request, ws: WebSocket):
+        while True:
+            message = await ws.receive()
+            body: dict = json.loads(message)
+            action = body.get("action", "")
+
+            if action == "light":
+                if param := body.get("param", {}):
+                    Light.set_light(param)
+            elif action == "exit":
+                break
+
+        await ws.send('{ "success": true, "message": "goodbye" }')
 
 
 # prebuilt light effect
